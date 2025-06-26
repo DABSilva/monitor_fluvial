@@ -495,7 +495,7 @@
             alarmeAtivo = !alarmeAtivo;
             const alarmeBtn = document.getElementById('alarmeBtn');
             alarmeBtn.classList.toggle('alarme-ativo', alarmeAtivo);
-            alarmeBtn.innerHTML = alarmeAtivo ? '<span class="icon">🔇</span> Alarmes Ativados' : '<span class="icon">🔊</span> Ativar Alarmes';
+            alarmeBtn.innerHTML = alarmeAtivo ? '<span class="icon">🔇</span> Desativar Alarmes' : '<span class="icon">🔊</span> Ativar Alarmes';
 
             if (!alarmeAtivo && oscillator) {
                 try { oscillator.stop(); } catch (e) {}
