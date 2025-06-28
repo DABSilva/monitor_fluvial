@@ -297,9 +297,6 @@
         let oscillator;
         const apiKeyOpenWeather = "e94e44b2281dc3ead1df4f95175b95a5";
 
-        // Variável para armazenar os últimos dados válidos (quando a umidade estava detectada)
-        let lastValidDisplayData = null;
-
         // --- Funções de Modo Noturno ---
         function enableDarkMode() {
             document.body.classList.add('dark-mode');
@@ -311,7 +308,7 @@
         function disableDarkMode() {
             document.body.classList.remove('dark-mode');
             localStorage.setItem('theme', 'light');
-            document.getElementById('darkModeToggle').textContent = '🌙';
+            document.getElementById('darkModeToggle').textContent = '�';
             updateChartColors();
         }
 
@@ -409,15 +406,15 @@
 
                 if (!data) {
                     console.log("Nenhum dado encontrado no Firebase Realtime Database. Aguardando dados do sensor...");
-                    document.getElementById('nivel').textContent = '--';
-                    document.getElementById('porcentagem').textContent = '--';
-                    document.getElementById('status').innerHTML = 'Aguardando dados do sensor...';
-                    
                     // Se não há dados do Firebase, a barra de chuva mostra "Sem chuva"
                     rainAlertElement.textContent = "Sem chuva no momento ⚪";
                     rainAlertElement.classList.remove('rain-detected');
                     rainAlertElement.style.display = 'block';
-                    lastValidDisplayData = null; // Zera dados congelados se não houver dados no Firebase
+
+                    // Limpa as variáveis se não houver dados no Firebase
+                    document.getElementById('nivel').textContent = '--';
+                    document.getElementById('porcentagem').textContent = '--';
+                    document.getElementById('status').innerHTML = 'Aguardando dados do sensor...';
                     return;
                 }
 
@@ -426,7 +423,7 @@
                 const statusTexto = data.status;
                 const rainDetected = data.rain_detected;
 
-                // --- Lógica para o Alerta de Chuva ---
+                // --- Lógica para o Alerta de Chuva (sempre visível) ---
                 rainAlertElement.style.display = 'block'; // Garante que a barra esteja sempre visível
                 if (rainDetected) {
                     rainAlertElement.textContent = "💧 Umidade detectada!";
@@ -436,34 +433,21 @@
                     rainAlertElement.classList.remove('rain-detected');
                 }
 
-                // --- Lógica para Nível, Porcentagem e Status (Congelar/Atualizar) ---
+                // --- Lógica para Nível, Porcentagem e Status (Limpar/Atualizar) ---
                 if (rainDetected) {
                     // Se a umidade é detectada, atualiza com os dados em tempo real
                     document.getElementById('nivel').textContent = nivelAtualCm.toFixed(1);
                     document.getElementById('porcentagem').textContent = nivelAtualPorcentagem.toFixed(1);
                     document.getElementById('status').innerHTML = statusTexto;
-                    // Armazena esses dados como os últimos válidos (quando a umidade estava presente)
-                    lastValidDisplayData = {
-                        nivel_cm: nivelAtualCm,
-                        porcentagem: nivelAtualPorcentagem,
-                        status: statusTexto
-                    };
                 } else { // Não há detecção de umidade
-                    if (lastValidDisplayData) {
-                        // Se houver dados válidos anteriores (indicando que choveu e parou),
-                        // exibe os dados "congelados"
-                        document.getElementById('nivel').textContent = lastValidDisplayData.nivel_cm.toFixed(1);
-                        document.getElementById('porcentagem').textContent = lastValidDisplayData.porcentagem.toFixed(1);
-                        document.getElementById('status').innerHTML = lastValidDisplayData.status;
-                    } else {
-                        // Se nunca choveu desde o carregamento ou dados Firebase eram nulos, mostra "--"
-                        document.getElementById('nivel').textContent = '--';
-                        document.getElementById('porcentagem').textContent = '--';
-                        document.getElementById('status').innerHTML = '--';
-                    }
+                    // Se não há umidade, os campos não mostram informação
+                    document.getElementById('nivel').textContent = '--';
+                    document.getElementById('porcentagem').textContent = '--';
+                    document.getElementById('status').innerHTML = '--';
                 }
                 
                 // --- Lógica do Gráfico (sempre atualiza com os dados atuais do Firebase) ---
+                // O gráfico sempre deve refletir o valor REAL do sensor, independentemente da detecção de chuva.
                 let subindo = false;
                 if (historicoGrafico.length > 0) {
                     const nivelAnteriorPorcentagem = historicoGrafico[historicoGrafico.length - 1];
@@ -723,3 +707,4 @@
     </div>
 </body>
 </html>
+�
