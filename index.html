@@ -64,10 +64,10 @@
             --chart-line-color: #74b9ff;
 
             /* Variáveis para cores de status do dashboard fluvial - Modo Noturno */
-            --status-normal-start: #1c3342; /* Azul escuro suave */
-            --status-attention-start: #42381c; /* Marrom escuro suave */
-            --status-alert-start: #422d1c; /* Laranja escuro suave */
-            --status-critical-start: #421c1c; /* Vermelho escuro suave */
+            --status-normal-start: #1c3342;
+            --status-attention-start: #42381c;
+            --status-alert-start: #422d1c;
+            --status-critical-start: #421c1c;
         }
 
         body {
@@ -297,6 +297,9 @@
         let oscillator;
         const apiKeyOpenWeather = "e94e44b2281dc3ead1df4f95175b95a5";
 
+        // Variável para armazenar os últimos dados válidos (quando a umidade estava detectada)
+        let lastValidDisplayData = null;
+
         // --- Funções de Modo Noturno ---
         function enableDarkMode() {
             document.body.classList.add('dark-mode');
@@ -339,7 +342,7 @@
                 fluvialChart.options.plugins.legend.labels.color = rootStyles.getPropertyValue('--chart-legend-color');
                 
                 fluvialChart.data.datasets[0].borderColor = rootStyles.getPropertyValue('--chart-line-color');
-                fluvialChart.data.datasets[0].pointBackgroundColor = rootStyles.getPropertyValue('--chart-line-color'); // Adicionado para cor do ponto
+                fluvialChart.data.datasets[0].pointBackgroundColor = rootStyles.getPropertyValue('--chart-line-color');
 
                 fluvialChart.update();
             }
@@ -360,7 +363,6 @@
             } else {
                 startColor = 'var(--status-critical-start)';
             }
-            // Usa as variáveis CSS definidas em :root e .dark-mode
             container.style.background = `linear-gradient(135deg, ${startColor} 0%, var(--container-bg) 100%)`;
         }
 
@@ -403,7 +405,6 @@
             const sensorRef = db.ref('/dadosDoSensor');
             sensorRef.on('value', (snapshot) => {
                 const data = snapshot.val();
-
                 const rainAlertElement = document.getElementById('rainAlert');
 
                 if (!data) {
@@ -412,9 +413,11 @@
                     document.getElementById('porcentagem').textContent = '--';
                     document.getElementById('status').innerHTML = 'Aguardando dados do sensor...';
                     
+                    // Se não há dados do Firebase, a barra de chuva mostra "Sem chuva"
                     rainAlertElement.textContent = "Sem chuva no momento ⚪";
                     rainAlertElement.classList.remove('rain-detected');
                     rainAlertElement.style.display = 'block';
+                    lastValidDisplayData = null; // Zera dados congelados se não houver dados no Firebase
                     return;
                 }
 
@@ -423,6 +426,44 @@
                 const statusTexto = data.status;
                 const rainDetected = data.rain_detected;
 
+                // --- Lógica para o Alerta de Chuva ---
+                rainAlertElement.style.display = 'block'; // Garante que a barra esteja sempre visível
+                if (rainDetected) {
+                    rainAlertElement.textContent = "💧 Umidade detectada!";
+                    rainAlertElement.classList.add('rain-detected');
+                } else {
+                    rainAlertElement.textContent = "Sem chuva no momento ⚪";
+                    rainAlertElement.classList.remove('rain-detected');
+                }
+
+                // --- Lógica para Nível, Porcentagem e Status (Congelar/Atualizar) ---
+                if (rainDetected) {
+                    // Se a umidade é detectada, atualiza com os dados em tempo real
+                    document.getElementById('nivel').textContent = nivelAtualCm.toFixed(1);
+                    document.getElementById('porcentagem').textContent = nivelAtualPorcentagem.toFixed(1);
+                    document.getElementById('status').innerHTML = statusTexto;
+                    // Armazena esses dados como os últimos válidos (quando a umidade estava presente)
+                    lastValidDisplayData = {
+                        nivel_cm: nivelAtualCm,
+                        porcentagem: nivelAtualPorcentagem,
+                        status: statusTexto
+                    };
+                } else { // Não há detecção de umidade
+                    if (lastValidDisplayData) {
+                        // Se houver dados válidos anteriores (indicando que choveu e parou),
+                        // exibe os dados "congelados"
+                        document.getElementById('nivel').textContent = lastValidDisplayData.nivel_cm.toFixed(1);
+                        document.getElementById('porcentagem').textContent = lastValidDisplayData.porcentagem.toFixed(1);
+                        document.getElementById('status').innerHTML = lastValidDisplayData.status;
+                    } else {
+                        // Se nunca choveu desde o carregamento ou dados Firebase eram nulos, mostra "--"
+                        document.getElementById('nivel').textContent = '--';
+                        document.getElementById('porcentagem').textContent = '--';
+                        document.getElementById('status').innerHTML = '--';
+                    }
+                }
+                
+                // --- Lógica do Gráfico (sempre atualiza com os dados atuais do Firebase) ---
                 let subindo = false;
                 if (historicoGrafico.length > 0) {
                     const nivelAnteriorPorcentagem = historicoGrafico[historicoGrafico.length - 1];
@@ -441,28 +482,15 @@
                 } else {
                     fluvialChart.data.datasets[0].fill = false;
                 }
-                fluvialChart.update('none');
+                fluvialChart.update('none'); // Atualiza o gráfico independentemente da detecção de chuva
 
-                document.getElementById('nivel').textContent = nivelAtualCm.toFixed(1);
-                document.getElementById('porcentagem').textContent = nivelAtualPorcentagem.toFixed(1);
-                document.getElementById('status').innerHTML = statusTexto;
-
-                atualizarCorFundoStatus(nivelAtualPorcentagem);
-
+                // --- Outras atualizações da UI ---
+                atualizarCorFundoStatus(nivelAtualPorcentagem); // Atualiza cor de fundo do container
                 if (nivelAtualPorcentagem >= 50 && alarmeAtivo) {
-                    tocarAlarme(nivelAtualPorcentagem);
-                }
-
-                if (rainDetected) {
-                    rainAlertElement.textContent = "💧 Umidade detectada!";
-                    rainAlertElement.classList.add('rain-detected');
-                    rainAlertElement.style.display = 'block';
-                } else {
-                    rainAlertElement.textContent = "Sem chuva no momento ⚪";
-                    rainAlertElement.classList.remove('rain-detected');
-                    rainAlertElement.style.display = 'block';
+                    tocarAlarme(nivelAtualPorcentagem); // Ativa alarme se necessário
                 }
             }, (errorObject) => {
+                // Trata erros na leitura do Firebase
                 console.error("Erro ao ler dados do Firebase: " + errorObject.name + " - " + errorObject.message);
                 document.getElementById('status').innerHTML = 'Erro ao carregar dados! ❌';
                 document.getElementById('rainAlert').textContent = "Erro na leitura de umidade! ❌";
@@ -495,7 +523,7 @@
             alarmeAtivo = !alarmeAtivo;
             const alarmeBtn = document.getElementById('alarmeBtn');
             alarmeBtn.classList.toggle('alarme-ativo', alarmeAtivo);
-            alarmeBtn.innerHTML = alarmeAtivo ? '<span class="icon">🔇</span> Desativar Alarmes' : '<span class="icon">🔊</span> Ativar Alarmes';
+            alarmeBtn.innerHTML = alarmeAtivo ? '<span class="icon">🔊</span> Alarmes Ativados' : '<span class="icon">🔇</span> Ativar Alarmes';
 
             if (!alarmeAtivo && oscillator) {
                 try { oscillator.stop(); } catch (e) {}
@@ -503,7 +531,7 @@
             }
         }
 
-        // --- Funções do Clima e Previsão do Tempo (melhoradas) ---
+        // --- Funções do Clima e Previsão do Tempo ---
         async function fetchWeatherData(city, elementId) {
             const currentUrl = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&appid=${apiKeyOpenWeather}&units=metric&lang=pt_br`;
             const forecastUrl = `https://api.openweathermap.org/data/2.5/forecast?q=${encodeURIComponent(city)}&appid=${apiKeyOpenWeather}&units=metric&lang=pt_br`;
@@ -592,13 +620,9 @@
 
         // --- Inicialização do Site ---
         window.onload = function() {
-            // Carrega a preferência de tema (modo noturno) ao carregar a página
             loadThemePreference();
-            
-            // Adiciona listener para o botão de modo noturno
             document.getElementById('darkModeToggle').addEventListener('click', toggleDarkMode);
 
-            // Inicialização do Gráfico Fluvial
             const ctx = document.getElementById('graficoFluvial').getContext('2d');
             fluvialChart = new Chart(ctx, {
                 type: 'line',
