@@ -308,7 +308,7 @@
         function disableDarkMode() {
             document.body.classList.remove('dark-mode');
             localStorage.setItem('theme', 'light');
-            document.getElementById('darkModeToggle').textContent = '�';
+            document.getElementById('darkModeToggle').textContent = '🌙';
             updateChartColors();
         }
 
@@ -404,17 +404,19 @@
                 const data = snapshot.val();
                 const rainAlertElement = document.getElementById('rainAlert');
 
+                // Garante que a barra de status de chuva esteja sempre visível.
+                rainAlertElement.style.display = 'block';
+
                 if (!data) {
                     console.log("Nenhum dado encontrado no Firebase Realtime Database. Aguardando dados do sensor...");
-                    // Se não há dados do Firebase, a barra de chuva mostra "Sem chuva"
-                    rainAlertElement.textContent = "Sem chuva no momento ⚪";
-                    rainAlertElement.classList.remove('rain-detected');
-                    rainAlertElement.style.display = 'block';
-
-                    // Limpa as variáveis se não houver dados no Firebase
                     document.getElementById('nivel').textContent = '--';
                     document.getElementById('porcentagem').textContent = '--';
                     document.getElementById('status').innerHTML = 'Aguardando dados do sensor...';
+                    rainAlertElement.textContent = "Sem chuva no momento ⚪";
+                    rainAlertElement.classList.remove('rain-detected');
+                    // Limpa o gráfico se não houver dados no Firebase
+                    fluvialChart.data.datasets[0].data = [];
+                    fluvialChart.update('none');
                     return;
                 }
 
@@ -423,8 +425,43 @@
                 const statusTexto = data.status;
                 const rainDetected = data.rain_detected;
 
-                // --- Lógica para o Alerta de Chuva (sempre visível) ---
-                rainAlertElement.style.display = 'block'; // Garante que a barra esteja sempre visível
+                // --- Lógica para Nível, Porcentagem e Status (Condicional) ---
+                if (rainDetected) {
+                    // Se a umidade é detectada, atualiza com os dados em tempo real
+                    document.getElementById('nivel').textContent = nivelAtualCm.toFixed(1);
+                    document.getElementById('porcentagem').textContent = nivelAtualPorcentagem.toFixed(1);
+                    document.getElementById('status').innerHTML = statusTexto;
+                    // O gráfico é atualizado com dados reais
+                    let subindo = false;
+                    if (historicoGrafico.length > 0) {
+                        const nivelAnteriorPorcentagem = historicoGrafico[historicoGrafico.length - 1];
+                        if (nivelAtualPorcentagem > nivelAnteriorPorcentagem) {
+                            subindo = true;
+                        }
+                    }
+                    historicoGrafico.push(nivelAtualPorcentagem);
+                    if (historicoGrafico.length > 30) historicoGrafico.shift();
+                    fluvialChart.data.datasets[0].data = historicoGrafico;
+                    if (subindo && nivelAtualPorcentagem > 0) {
+                        fluvialChart.data.datasets[0].fill = 'start';
+                        fluvialChart.data.datasets[0].backgroundColor = 'rgba(0, 0, 139, 0.4)';
+                    } else {
+                        fluvialChart.data.datasets[0].fill = false;
+                    }
+                    fluvialChart.update('none');
+
+                } else { // Não há detecção de umidade
+                    // Se não há umidade, os campos não mostram informação
+                    document.getElementById('nivel').textContent = '--';
+                    document.getElementById('porcentagem').textContent = '--';
+                    document.getElementById('status').innerHTML = '--';
+                    // O gráfico é limpo para não mostrar dados quando não há umidade
+                    fluvialChart.data.datasets[0].data = [];
+                    historicoGrafico = []; // Limpa o histórico também
+                    fluvialChart.update('none');
+                }
+                
+                // --- Lógica para o Alerta de Chuva (Texto e Estilo) ---
                 if (rainDetected) {
                     rainAlertElement.textContent = "💧 Umidade detectada!";
                     rainAlertElement.classList.add('rain-detected');
@@ -433,43 +470,8 @@
                     rainAlertElement.classList.remove('rain-detected');
                 }
 
-                // --- Lógica para Nível, Porcentagem e Status (Limpar/Atualizar) ---
-                if (rainDetected) {
-                    // Se a umidade é detectada, atualiza com os dados em tempo real
-                    document.getElementById('nivel').textContent = nivelAtualCm.toFixed(1);
-                    document.getElementById('porcentagem').textContent = nivelAtualPorcentagem.toFixed(1);
-                    document.getElementById('status').innerHTML = statusTexto;
-                } else { // Não há detecção de umidade
-                    // Se não há umidade, os campos não mostram informação
-                    document.getElementById('nivel').textContent = '--';
-                    document.getElementById('porcentagem').textContent = '--';
-                    document.getElementById('status').innerHTML = '--';
-                }
-                
-                // --- Lógica do Gráfico (sempre atualiza com os dados atuais do Firebase) ---
-                // O gráfico sempre deve refletir o valor REAL do sensor, independentemente da detecção de chuva.
-                let subindo = false;
-                if (historicoGrafico.length > 0) {
-                    const nivelAnteriorPorcentagem = historicoGrafico[historicoGrafico.length - 1];
-                    if (nivelAtualPorcentagem > nivelAnteriorPorcentagem) {
-                        subindo = true;
-                    }
-                }
-
-                historicoGrafico.push(nivelAtualPorcentagem);
-                if (historicoGrafico.length > 30) historicoGrafico.shift();
-
-                fluvialChart.data.datasets[0].data = historicoGrafico;
-                if (subindo && nivelAtualPorcentagem > 0) {
-                    fluvialChart.data.datasets[0].fill = 'start';
-                    fluvialChart.data.datasets[0].backgroundColor = 'rgba(0, 0, 139, 0.4)';
-                } else {
-                    fluvialChart.data.datasets[0].fill = false;
-                }
-                fluvialChart.update('none'); // Atualiza o gráfico independentemente da detecção de chuva
-
                 // --- Outras atualizações da UI ---
-                atualizarCorFundoStatus(nivelAtualPorcentagem); // Atualiza cor de fundo do container
+                atualizarCorFundoStatus(nivelAtualPorcentagem); // Atualiza cor de fundo do container (com base no dado do Firebase, mesmo que não seja exibido)
                 if (nivelAtualPorcentagem >= 50 && alarmeAtivo) {
                     tocarAlarme(nivelAtualPorcentagem); // Ativa alarme se necessário
                 }
@@ -480,6 +482,10 @@
                 document.getElementById('rainAlert').textContent = "Erro na leitura de umidade! ❌";
                 rainAlertElement.classList.remove('rain-detected');
                 rainAlertElement.style.display = 'block';
+                // Limpa o gráfico em caso de erro na leitura do Firebase
+                fluvialChart.data.datasets[0].data = [];
+                historicoGrafico = [];
+                fluvialChart.update('none');
             });
         }
 
@@ -707,4 +713,3 @@
     </div>
 </body>
 </html>
-�
